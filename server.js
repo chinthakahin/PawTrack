@@ -35,7 +35,7 @@ app.post('/api/analyze-rescue', upload.single('animalImage'), async (req, res) =
         // Call the Gemini Multimodal Model (gemini-2.5-flash is very fast for images)
        // Call the Gemini Multimodal Model (Pro model)
       const response = await ai.models.generateContent({
-            model: 'gemini-3.5-flash', 
+            model: 'gemini-1.5-flash', 
             contents: [
                 prompt,
                 {

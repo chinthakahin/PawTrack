@@ -27,9 +27,9 @@ exports.identifyAnimal = async (req, res, next) => {
     // Initialize Google AI SDK
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Configure model with direct JSON output format
+    // Configure model with updated Gemini model (gemini-2.0-flash)
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       generationConfig: { responseMimeType: 'application/json' },
     });
 
