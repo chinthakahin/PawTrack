@@ -1,4 +1,4 @@
-// @desc    Identify animal species and health condition using OpenRouter (Dynamic Active Models)
+// @desc    Identify animal species and health condition using OpenRouter
 // @route   POST /api/ai/identify
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
@@ -26,9 +26,11 @@ exports.identifyAnimal = async (req, res, next) => {
     const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
     const formattedMime = mimeType || 'image/jpeg';
 
+    // Stricter prompt to force JSON only
     const promptText = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
-      Provide the response strictly as a raw JSON object with NO extra text or markdown formatting:
+      You MUST output ONLY a valid raw JSON object. Do not include markdown code blocks (\`\`\`json). Do not include introductory or concluding text.
+      Strict JSON Format:
       {
         "species": "Name of the animal species and estimated breed",
         "healthCondition": "Observed physical condition/health status (Injured, Healthy, Malnourished, etc.)",
@@ -37,14 +39,12 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    // Fetch active models dynamically from OpenRouter to get exact live endpoint IDs
     let candidateModels = [];
     try {
-      const modelsRes = await fetch('https://openrouter.ai/api/v1/models');
+      const modelsRes = await fetch('[https://openrouter.ai/api/v1/models](https://openrouter.ai/api/v1/models)');
       const modelsJson = await modelsRes.json();
 
       if (modelsJson.data && Array.isArray(modelsJson.data)) {
-        // Filter free models that support vision / multimodal / image input
         candidateModels = modelsJson.data
           .filter((m) => {
             const isFree = m.id.endsWith(':free') || m.pricing?.prompt === '0';
@@ -61,10 +61,9 @@ exports.identifyAnimal = async (req, res, next) => {
           .map((m) => m.id);
       }
     } catch (e) {
-      console.warn('Could not fetch OpenRouter models dynamically, using fallback list:', e.message);
+      console.warn('Dynamic fetch failed, using fallback list');
     }
 
-    // Fallback model array if dynamic API query is empty
     if (candidateModels.length === 0) {
       candidateModels = [
         'meta-llama/llama-3.2-11b-vision-instruct:free',
@@ -74,18 +73,16 @@ exports.identifyAnimal = async (req, res, next) => {
     }
 
     let rawText = null;
-    let lastError = null;
     let usedModel = '';
 
-    // Loop through live models until one succeeds
     for (const modelName of candidateModels) {
       try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetch('[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://pawtrack.app',
+            'HTTP-Referer': '[https://pawtrack.app](https://pawtrack.app)',
             'X-Title': 'PawTrack',
           },
           body: JSON.stringify({
@@ -113,31 +110,37 @@ exports.identifyAnimal = async (req, res, next) => {
           rawText = apiData.choices[0].message.content;
           usedModel = modelName;
           break;
-        } else {
-          lastError = apiData.error?.message || `Model ${modelName} failed`;
         }
       } catch (err) {
-        lastError = err.message;
+        // Continue to next model if this one fails
       }
     }
 
     if (!rawText) {
       return res.status(500).json({
         success: false,
-        error: `AI identification failed: ${lastError || 'No available free vision model responded.'}`,
+        error: 'All free vision models failed to respond.',
       });
     }
 
     let parsedData;
     try {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
-      parsedData = JSON.parse(jsonStr);
+      // Robust JSON Extraction: Strip markdown and find { ... }
+      let cleanText = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      const startIndex = cleanText.indexOf('{');
+      const endIndex = cleanText.lastIndexOf('}');
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        cleanText = cleanText.substring(startIndex, endIndex + 1);
+      }
+
+      parsedData = JSON.parse(cleanText);
     } catch (parseErr) {
+      // If it STILL fails, send the raw text back so we can see what the model outputted
       return res.status(500).json({
         success: false,
         error: 'Invalid JSON response received from AI model.',
-        raw: rawText,
+        rawAIOutput: rawText // Helps debugging!
       });
     }
 
