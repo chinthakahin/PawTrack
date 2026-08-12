@@ -1,21 +1,21 @@
-// @desc    Identify animal species and health condition using Gemini REST API
+// @desc    Identify animal species and health condition using OpenRouter (Gemini Model)
 // @route   POST /api/ai/identify
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
   try {
-    let token =
+    let apiKey =
       process.env.GEMINI_API_KEY ||
-      process.env.VITE_GEMINI_API_KEY ||
-      process.env.REACT_APP_GEMINI_API_KEY;
+      process.env.OPENROUTER_API_KEY ||
+      process.env.VITE_GEMINI_API_KEY;
 
-    if (!token) {
+    if (!apiKey) {
       return res.status(500).json({
         success: false,
-        error: 'Gemini Token/API Key is missing in environment variables.',
+        error: 'OpenRouter API Key is missing in environment variables.',
       });
     }
 
-    token = token.trim().replace(/^["']|["']$/g, '');
+    apiKey = apiKey.trim().replace(/^["']|["']$/g, '');
 
     const { imageBase64, mimeType } = req.body;
 
@@ -24,10 +24,11 @@ exports.identifyAnimal = async (req, res, next) => {
     }
 
     const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+    const formattedMime = mimeType || 'image/jpeg';
 
     const promptText = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
-      Provide the response in raw JSON format with the following keys:
+      Provide the response strictly as a raw JSON object with NO extra text:
       {
         "species": "Name of the animal species and estimated breed",
         "healthCondition": "Observed physical condition/health status (Injured, Healthy, Malnourished, etc.)",
@@ -36,62 +37,58 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    // Detect whether token is an OAuth Access Token (starts with AQ) or standard API Key (AIza)
-    const isAccessToken = token.startsWith('AQ');
-    const endpoint = isAccessToken
-      ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
-      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${token}`;
-
-    const headers = { 'Content-Type': 'application/json' };
-    if (isAccessToken) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const googleApiResponse = await fetch(endpoint, {
+    // OpenRouter API call
+    const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers,
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://pawtrack.app',
+        'X-Title': 'PawTrack'
+      },
       body: JSON.stringify({
-        contents: [
+        model: 'google/gemini-2.0-flash-exp:free',
+        messages: [
           {
-            parts: [
-              { text: promptText },
+            role: 'user',
+            content: [
+              { type: 'text', text: promptText },
               {
-                inlineData: {
-                  mimeType: mimeType || 'image/jpeg',
-                  data: cleanBase64,
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
-      }),
+                type: 'image_url',
+                image_url: {
+                  url: `data:${formattedMime};base64,${cleanBase64}`
+                }
+              }
+            ]
+          }
+        ]
+      })
     });
 
-    const apiData = await googleApiResponse.json();
+    const apiData = await openRouterResponse.json();
 
-    if (!googleApiResponse.ok) {
-      return res.status(googleApiResponse.status).json({
+    if (!openRouterResponse.ok) {
+      return res.status(openRouterResponse.status).json({
         success: false,
-        error: apiData.error?.message || 'Google API request failed.',
+        error: apiData.error?.message || 'OpenRouter API request failed.',
         details: apiData,
       });
     }
 
-    const rawText = apiData.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawText = apiData.choices?.[0]?.message?.content;
 
     if (!rawText) {
       return res.status(500).json({
         success: false,
-        error: 'No text response received from AI model.',
+        error: 'No response received from AI model.',
       });
     }
 
     let parsedData;
     try {
-      parsedData = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
+      parsedData = JSON.parse(jsonStr);
     } catch (parseErr) {
       return res.status(500).json({
         success: false,
