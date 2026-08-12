@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PawTrack - AI Rescue Analyzer Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+        .box { border: 1px solid #ccc; padding: 20px; border-radius: 10px; }
+        input, textarea, button { display: block; width: 100%; margin-bottom: 15px; padding: 10px; }
+        button { background-color: #007BFF; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        #result { margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-left: 5px solid #28a745; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="box">
+        <h2>🐾 PawTrack AI Analyzer</h2>
+        <p>Upload a photo of the stray animal and add a short description.</p>
+
+        <!-- Form for uploading image and description -->
+        <input type="file" id="animalImage" accept="image/*">
+        <textarea id="description" rows="3" placeholder="E.g., Found this dog limping near the main road..."></textarea>
+        
+        <button onclick="analyzeRescue()" id="submitBtn">Analyze with AI</button>
+
+        <!-- Area to show the result -->
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function analyzeRescue() {
+            const imageFile = document.getElementById('animalImage').files[0];
+            const description = document.getElementById('description').value;
+            const resultDiv = document.getElementById('result');
+            const submitBtn = document.getElementById('submitBtn');
+
+            if (!imageFile) {
+                alert("Please select an image first!");
+                return;
+            }
+
+            // Tech English Tip: We use FormData to package files and text together
+            const formData = new FormData();
+            formData.append('animalImage', imageFile);
+            formData.append('description', description);
+
+            submitBtn.innerText = "Analyzing... Please wait ⏳";
+            submitBtn.disabled = true;
+
+            try {
+                // Tech English Tip: Fetch is used to send a 'Request' to our Backend API
+                const response = await fetch('http://localhost:3000/api/analyze-rescue', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                // Show the result
+                resultDiv.style.display = "block";
+                resultDiv.innerHTML = `<strong>AI Result:</strong> <br><br> ${data.result}`;
+
+            } catch (error) {
+                resultDiv.style.display = "block";
+                resultDiv.innerHTML = `<span style="color:red;">Error connecting to the server. Is Backend running?</span>`;
+            } finally {
+                submitBtn.innerText = "Analyze with AI";
+                submitBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

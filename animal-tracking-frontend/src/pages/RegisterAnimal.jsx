@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
@@ -13,10 +13,45 @@ const blank = {
 
 const RegisterAnimal = ({ onNavigate }) => {
   const { token, isVolunteer } = useAuth();
-  const [form, setForm]   = useState(blank);
-  const [busy, setBusy]   = useState(false);
+  const [form, setForm]     = useState(blank);
+  const [busy, setBusy]     = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError]   = useState('');
+  const [aiFilled, setAiFilled] = useState(false);
+
+  // Auto-fill form if AI draft data exists in localStorage
+  useEffect(() => {
+    const draft = localStorage.getItem('ai_animal_draft');
+    if (draft) {
+      try {
+        const aiData = JSON.parse(draft);
+
+        // Determine species (Dog / Cat / Other)
+        let detectedSpecies = 'Dog';
+        if (aiData.species) {
+          const lower = aiData.species.toLowerCase();
+          if (lower.includes('cat')) detectedSpecies = 'Cat';
+          else if (lower.includes('dog')) detectedSpecies = 'Dog';
+          else detectedSpecies = 'Other';
+        }
+
+        setForm(f => ({
+          ...f,
+          species: detectedSpecies,
+          breed: aiData.species || f.breed,
+          med: {
+            ...f.med,
+            note: `[AI Analysis Results]\nCondition: ${aiData.healthCondition || 'N/A'}\nSummary: ${aiData.description || ''}`
+          }
+        }));
+
+        setAiFilled(true);
+        localStorage.removeItem('ai_animal_draft');
+      } catch (err) {
+        console.error('Error loading AI draft:', err);
+      }
+    }
+  }, []);
 
   if (!isVolunteer) return (
     <div className="empty-state">
@@ -49,8 +84,8 @@ const RegisterAnimal = ({ onNavigate }) => {
       if (form.med.note)       mp.medicalLogs         = [{ note: form.med.note, date: new Date() }];
 
       const loc = {};
-      if (form.loc.latitude)   loc.latitude    = parseFloat(form.loc.latitude);
-      if (form.loc.longitude)  loc.longitude   = parseFloat(form.loc.longitude);
+      if (form.loc.latitude)    loc.latitude    = parseFloat(form.loc.latitude);
+      if (form.loc.longitude)   loc.longitude   = parseFloat(form.loc.longitude);
       if (form.loc.addressText) loc.addressText = form.loc.addressText;
 
       const res = await axios.post(`${API}/animals`, {
@@ -62,6 +97,7 @@ const RegisterAnimal = ({ onNavigate }) => {
 
       setResult(res.data.data);
       setForm(blank);
+      setAiFilled(false);
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed.');
     } finally { setBusy(false); }
@@ -75,6 +111,13 @@ const RegisterAnimal = ({ onNavigate }) => {
           <p>Add a new stray animal to the management system</p>
         </div>
       </div>
+
+      {/* AI Auto-fill Notice */}
+      {aiFilled && (
+        <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', color: '#3730A3', borderRadius: 'var(--r-lg)', padding: '12px 16px', marginBottom: 20, fontSize: 14 }}>
+          ✨ <strong>Auto-filled with Gemini AI Data!</strong> Please review and adjust the details as needed.
+        </div>
+      )}
 
       {/* Success */}
       {result && (
@@ -204,7 +247,7 @@ const RegisterAnimal = ({ onNavigate }) => {
               </div>
               <div className="form-group">
                 <label className="form-label">📋 Initial Medical Note</label>
-                <textarea className="form-textarea" placeholder="Any observations, injuries…" value={form.med.note} onChange={e => setM('note', e.target.value)} rows={3} />
+                <textarea className="form-textarea" placeholder="Any observations, injuries…" value={form.med.note} onChange={e => setM('note', e.target.value)} rows={4} />
               </div>
             </div>
           </div>

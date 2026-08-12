@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 const navItems = [
   { label: 'Dashboard',       icon: '🏠', path: '/',          section: 'main' },
+  { label: 'AI Identify',     icon: '✨', path: '/ai',        section: 'main' },
   { label: 'QR Scanner',      icon: '📷', path: '/scanner',   section: 'main' },
   { label: 'Hotspot Map',     icon: '🗺️', path: '/map',       section: 'main' },
   { label: 'Register Animal', icon: '➕', path: '/register',  section: 'volunteer', volunteerOnly: true },

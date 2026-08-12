@@ -8,15 +8,23 @@ import QRScanner from './pages/QRScanner';
 import MapPage from './pages/MapPage';
 import RegisterAnimal from './pages/RegisterAnimal';
 import AdoptionRequests from './pages/AdoptionRequests';
+import AnimalAIIdentifier from './components/AnimalAIIdentifier';
 import './index.css';
 
 // Simple client-side router without react-router-dom
-// (avoids hash routing issues and keeps the app self-contained)
 const parseRoute = (path) => {
   if (path.startsWith('/animal/')) {
     return { page: 'animal', animalId: path.replace('/animal/', '') };
   }
-  const routes = { '/': 'dashboard', '/scanner': 'scanner', '/map': 'map', '/register': 'register', '/adoptions': 'adoptions', '/auth': 'auth' };
+  const routes = {
+    '/': 'dashboard',
+    '/scanner': 'scanner',
+    '/map': 'map',
+    '/register': 'register',
+    '/adoptions': 'adoptions',
+    '/ai': 'ai',
+    '/auth': 'auth',
+  };
   return { page: routes[path] || 'dashboard' };
 };
 
@@ -27,6 +35,7 @@ const PAGE_TITLES = {
   register: { title: 'Register Animal', subtitle: 'Add a new stray to the system' },
   adoptions: { title: 'Adoption Requests', subtitle: 'Manage incoming adoption applications' },
   animal: { title: 'Animal Profile', subtitle: 'Full profile, medical history & QR code' },
+  ai: { title: 'AI Identification', subtitle: 'Identify animal species & health status using Gemini AI' },
   auth: { title: 'Sign In', subtitle: 'Access your PawTrack account' },
 };
 
@@ -39,7 +48,7 @@ const AppInner = () => {
   const route = parseRoute(currentPath);
 
   // Show auth page when not logged in and not on a public page
-  const publicPages = ['dashboard', 'scanner', 'animal'];
+  const publicPages = ['dashboard', 'scanner', 'animal', 'ai'];
   const requiresAuth = !publicPages.includes(route.page);
 
   if (loading) {
@@ -94,6 +103,7 @@ const AppInner = () => {
           {route.page === 'map' && <MapPage onNavigate={navigate} />}
           {route.page === 'register' && <RegisterAnimal onNavigate={navigate} />}
           {route.page === 'adoptions' && <AdoptionRequests onNavigate={navigate} />}
+          {route.page === 'ai' && <AnimalAIIdentifier onNavigate={navigate} />}
         </main>
       </div>
     </div>
