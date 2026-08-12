@@ -5,7 +5,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
   try {
-    // Retrieve API key from environment variables (with fallback)
     const apiKey =
       process.env.GEMINI_API_KEY ||
       process.env.VITE_GEMINI_API_KEY ||
@@ -24,15 +23,39 @@ exports.identifyAnimal = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Image data is required' });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    // 1. Get list of models available for this API Key dynamically
+    let selectedModelName = 'gemini-1.5-flash';
+    try {
+      const modelsResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      );
+      const modelsData = await modelsResponse.json();
 
-    // List of models to try in sequence
-    const candidateModels = [
-      process.env.GEMINI_MODEL,
-      'gemini-1.5-flash',
-      'gemini-1.5-pro',
-      'gemini-2.0-flash'
-    ].filter(Boolean);
+      if (modelsData.models && modelsData.models.length > 0) {
+        // Filter models supporting 'generateContent'
+        const availableModels = modelsData.models.filter(m =>
+          m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
+        );
+
+        // Find the best 'flash' model available
+        const flashModel = availableModels.find(m => m.name.toLowerCase().includes('flash'));
+
+        if (flashModel) {
+          selectedModelName = flashModel.name.replace('models/', '');
+        } else if (availableModels.length > 0) {
+          selectedModelName = availableModels[0].name.replace('models/', '');
+        }
+      }
+    } catch (modelFetchErr) {
+      console.warn('Could not auto-detect model, falling back to default:', modelFetchErr.message);
+    }
+
+    // 2. Initialize Gemini AI with auto-selected model
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: selectedModelName,
+      generationConfig: { responseMimeType: 'application/json' },
+    });
 
     const prompt = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
@@ -45,7 +68,6 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    // Strip data URI prefix if present (e.g. "data:image/jpeg;base64,")
     const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
 
     const imagePart = {
@@ -55,28 +77,8 @@ exports.identifyAnimal = async (req, res, next) => {
       },
     };
 
-    let responseText = null;
-    let lastError = null;
-
-    // Try each model until one succeeds
-    for (const modelName of candidateModels) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const result = await model.generateContent([prompt, imagePart]);
-        responseText = result.response.text();
-        if (responseText) break;
-      } catch (err) {
-        console.warn(`Model ${modelName} failed, trying next fallback...`);
-        lastError = err;
-      }
-    }
-
-    if (!responseText) {
-      throw lastError || new Error('Failed to generate content with available Gemini models.');
-    }
+    const result = await model.generateContent([prompt, imagePart]);
+    const responseText = result.response.text();
 
     let parsedData;
     try {
@@ -91,6 +93,7 @@ exports.identifyAnimal = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
+      activeModel: selectedModelName,
       data: parsedData,
     });
   } catch (error) {
