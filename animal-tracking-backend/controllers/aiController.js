@@ -23,33 +23,15 @@ exports.identifyAnimal = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Image data is required' });
     }
 
-    // Dynamic model selection from active Google models
-    let activeModelName = 'gemini-1.5-flash';
-    try {
-      const apiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
-      );
-      const apiData = await apiResponse.json();
-
-      if (apiData.models && apiData.models.length > 0) {
-        const supported = apiData.models.filter(
-          (m) => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
-        );
-        const flashModel = supported.find((m) => m.name.toLowerCase().includes('flash'));
-        const chosen = flashModel || supported[0];
-        if (chosen) {
-          activeModelName = chosen.name.replace('models/', '');
-        }
-      }
-    } catch (e) {
-      console.warn('Auto-model fetch failed, using fallback:', e.message);
-    }
-
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: activeModelName,
-      generationConfig: { responseMimeType: 'application/json' },
-    });
+
+    // List of active models to try sequentially
+    const candidateModels = [
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash-8b',
+      'gemini-2.0-flash-exp',
+    ];
 
     const prompt = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
@@ -71,8 +53,32 @@ exports.identifyAnimal = async (req, res, next) => {
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const responseText = result.response.text();
+    let responseText = null;
+    let lastError = null;
+    let usedModelName = '';
+
+    // Try each model until generateContent succeeds
+    for (const modelName of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const result = await model.generateContent([prompt, imagePart]);
+        responseText = result.response.text();
+        if (responseText) {
+          usedModelName = modelName;
+          break;
+        }
+      } catch (err) {
+        console.warn(`Model ${modelName} failed, trying next candidate...`, err.message);
+        lastError = err;
+      }
+    }
+
+    if (!responseText) {
+      throw lastError || new Error('No compatible Gemini model succeeded.');
+    }
 
     let parsedData;
     try {
@@ -87,7 +93,7 @@ exports.identifyAnimal = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      usedModel: activeModelName,
+      usedModel: usedModelName,
       data: parsedData,
     });
   } catch (error) {
