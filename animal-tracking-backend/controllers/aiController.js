@@ -1,24 +1,21 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-// @desc    Identify animal species and health condition using Gemini AI
+// @desc    Identify animal species and health condition using Gemini REST API
 // @route   POST /api/ai/identify
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
   try {
-    let apiKey =
+    let token =
       process.env.GEMINI_API_KEY ||
       process.env.VITE_GEMINI_API_KEY ||
       process.env.REACT_APP_GEMINI_API_KEY;
 
-    if (!apiKey) {
+    if (!token) {
       return res.status(500).json({
         success: false,
-        error: 'Gemini API Key is missing in environment variables.',
+        error: 'Gemini Token/API Key is missing in environment variables.',
       });
     }
 
-    // Clean spaces or extra quotes from API key
-    apiKey = apiKey.trim().replace(/^["']|["']$/g, '');
+    token = token.trim().replace(/^["']|["']$/g, '');
 
     const { imageBase64, mimeType } = req.body;
 
@@ -26,15 +23,9 @@ exports.identifyAnimal = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Image data is required' });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
 
-    // Standard production model
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: 'application/json' },
-    });
-
-    const prompt = `
+    const promptText = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
       Provide the response in raw JSON format with the following keys:
       {
@@ -45,26 +36,67 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    const cleanBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+    // Detect whether token is an OAuth Access Token (starts with AQ) or standard API Key (AIza)
+    const isAccessToken = token.startsWith('AQ');
+    const endpoint = isAccessToken
+      ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
+      : `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${token}`;
 
-    const imagePart = {
-      inlineData: {
-        data: cleanBase64,
-        mimeType: mimeType || 'image/jpeg',
-      },
-    };
+    const headers = { 'Content-Type': 'application/json' };
+    if (isAccessToken) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const responseText = result.response.text();
+    const googleApiResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: mimeType || 'image/jpeg',
+                  data: cleanBase64,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+
+    const apiData = await googleApiResponse.json();
+
+    if (!googleApiResponse.ok) {
+      return res.status(googleApiResponse.status).json({
+        success: false,
+        error: apiData.error?.message || 'Google API request failed.',
+        details: apiData,
+      });
+    }
+
+    const rawText = apiData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!rawText) {
+      return res.status(500).json({
+        success: false,
+        error: 'No text response received from AI model.',
+      });
+    }
 
     let parsedData;
     try {
-      parsedData = JSON.parse(responseText.replace(/```json|```/g, '').trim());
+      parsedData = JSON.parse(rawText.replace(/```json|```/g, '').trim());
     } catch (parseErr) {
       return res.status(500).json({
         success: false,
         error: 'Invalid JSON response received from AI model.',
-        raw: responseText,
+        raw: rawText,
       });
     }
 
@@ -73,9 +105,6 @@ exports.identifyAnimal = async (req, res, next) => {
       data: parsedData,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Error communicating with Gemini API.',
-    });
+    next(error);
   }
 };
