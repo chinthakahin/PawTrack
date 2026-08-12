@@ -23,37 +23,31 @@ exports.identifyAnimal = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Image data is required' });
     }
 
-    // 1. Get list of models available for this API Key dynamically
-    let selectedModelName = 'gemini-1.5-flash';
+    // Dynamic model selection from active Google models
+    let activeModelName = 'gemini-1.5-flash';
     try {
-      const modelsResponse = await fetch(
+      const apiResponse = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
       );
-      const modelsData = await modelsResponse.json();
+      const apiData = await apiResponse.json();
 
-      if (modelsData.models && modelsData.models.length > 0) {
-        // Filter models supporting 'generateContent'
-        const availableModels = modelsData.models.filter(m =>
-          m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
+      if (apiData.models && apiData.models.length > 0) {
+        const supported = apiData.models.filter(
+          (m) => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
         );
-
-        // Find the best 'flash' model available
-        const flashModel = availableModels.find(m => m.name.toLowerCase().includes('flash'));
-
-        if (flashModel) {
-          selectedModelName = flashModel.name.replace('models/', '');
-        } else if (availableModels.length > 0) {
-          selectedModelName = availableModels[0].name.replace('models/', '');
+        const flashModel = supported.find((m) => m.name.toLowerCase().includes('flash'));
+        const chosen = flashModel || supported[0];
+        if (chosen) {
+          activeModelName = chosen.name.replace('models/', '');
         }
       }
-    } catch (modelFetchErr) {
-      console.warn('Could not auto-detect model, falling back to default:', modelFetchErr.message);
+    } catch (e) {
+      console.warn('Auto-model fetch failed, using fallback:', e.message);
     }
 
-    // 2. Initialize Gemini AI with auto-selected model
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: selectedModelName,
+      model: activeModelName,
       generationConfig: { responseMimeType: 'application/json' },
     });
 
@@ -93,7 +87,7 @@ exports.identifyAnimal = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      activeModel: selectedModelName,
+      usedModel: activeModelName,
       data: parsedData,
     });
   } catch (error) {
