@@ -1,4 +1,4 @@
-// @desc    Identify animal species and health condition using OpenRouter (Gemini Model)
+// @desc    Identify animal species and health condition using OpenRouter
 // @route   POST /api/ai/identify
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
@@ -28,7 +28,7 @@ exports.identifyAnimal = async (req, res, next) => {
 
     const promptText = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
-      Provide the response strictly as a raw JSON object with NO extra text:
+      Provide the response strictly as a raw JSON object with NO extra text or markdown formatting:
       {
         "species": "Name of the animal species and estimated breed",
         "healthCondition": "Observed physical condition/health status (Injured, Healthy, Malnourished, etc.)",
@@ -37,50 +37,65 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    // OpenRouter API call
-    const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://pawtrack.app',
-        'X-Title': 'PawTrack'
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp:free',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: promptText },
+    // Active OpenRouter Multimodal/Vision models to try sequentially
+    const candidateModels = [
+      'meta-llama/llama-3.2-11b-vision-instruct:free',
+      'google/gemini-2.0-flash-lite-001:free',
+      'google/gemini-2.0-flash-001',
+      'google/gemini-flash-1.5'
+    ];
+
+    let rawText = null;
+    let lastError = null;
+    let usedModel = '';
+
+    for (const modelName of candidateModels) {
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://pawtrack.app',
+            'X-Title': 'PawTrack'
+          },
+          body: JSON.stringify({
+            model: modelName,
+            messages: [
               {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${formattedMime};base64,${cleanBase64}`
-                }
+                role: 'user',
+                content: [
+                  { type: 'text', text: promptText },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:${formattedMime};base64,${cleanBase64}`
+                    }
+                  }
+                ]
               }
             ]
-          }
-        ]
-      })
-    });
+          })
+        });
 
-    const apiData = await openRouterResponse.json();
+        const apiData = await response.json();
 
-    if (!openRouterResponse.ok) {
-      return res.status(openRouterResponse.status).json({
-        success: false,
-        error: apiData.error?.message || 'OpenRouter API request failed.',
-        details: apiData,
-      });
+        if (response.ok && apiData.choices?.[0]?.message?.content) {
+          rawText = apiData.choices[0].message.content;
+          usedModel = modelName;
+          break;
+        } else {
+          lastError = apiData.error?.message || `Failed model ${modelName}`;
+        }
+      } catch (err) {
+        lastError = err.message;
+      }
     }
-
-    const rawText = apiData.choices?.[0]?.message?.content;
 
     if (!rawText) {
       return res.status(500).json({
         success: false,
-        error: 'No response received from AI model.',
+        error: lastError || 'All candidate OpenRouter models failed.',
       });
     }
 
@@ -99,6 +114,7 @@ exports.identifyAnimal = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
+      activeModel: usedModel,
       data: parsedData,
     });
   } catch (error) {
