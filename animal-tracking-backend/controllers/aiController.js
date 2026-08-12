@@ -24,15 +24,15 @@ exports.identifyAnimal = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'Image data is required' });
     }
 
-    // Initialize Google AI SDK
     const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // Configure model using dynamic latest model alias
-    const selectedModel = process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest';
-    const model = genAI.getGenerativeModel({
-      model: selectedModel,
-      generationConfig: { responseMimeType: 'application/json' },
-    });
+
+    // List of models to try in sequence
+    const candidateModels = [
+      process.env.GEMINI_MODEL,
+      'gemini-1.5-flash',
+      'gemini-1.5-pro',
+      'gemini-2.0-flash'
+    ].filter(Boolean);
 
     const prompt = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
@@ -55,8 +55,28 @@ exports.identifyAnimal = async (req, res, next) => {
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const responseText = result.response.text();
+    let responseText = null;
+    let lastError = null;
+
+    // Try each model until one succeeds
+    for (const modelName of candidateModels) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+        const result = await model.generateContent([prompt, imagePart]);
+        responseText = result.response.text();
+        if (responseText) break;
+      } catch (err) {
+        console.warn(`Model ${modelName} failed, trying next fallback...`);
+        lastError = err;
+      }
+    }
+
+    if (!responseText) {
+      throw lastError || new Error('Failed to generate content with available Gemini models.');
+    }
 
     let parsedData;
     try {
