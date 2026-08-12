@@ -39,7 +39,7 @@ const AnimalAIIdentifier = ({ onNavigate }) => {
     setResult(null);
 
     try {
-      const response = await fetch('http://localhost:5000/api/ai/identify', {
+      const response = await fetch('https://pawtrack-backend.vercel.app/api/ai/identify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

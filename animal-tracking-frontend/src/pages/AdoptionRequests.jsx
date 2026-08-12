@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://pawtrack-backend.vercel.app/api';
 
 const STATUS_STYLE = {
   Pending:  { badge: 'badge-stray',    accent: 'var(--stray)' },

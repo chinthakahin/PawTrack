@@ -20,7 +20,7 @@ const AddAnimal = () => {
         e.preventDefault();
         try {
            
-            const res = await axios.post('http://localhost:5000/api/animals/add', formData);
+            const res = await axios.post('https://pawtrack-backend.vercel.app/api/animals/add', formData);
             
             if (res.data.success) {
                 alert("Animal Added Successfully!");

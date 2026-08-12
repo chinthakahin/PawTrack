@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://pawtrack-backend.vercel.app/api';
 
 const STATUS_BADGE = {
   Stray: 'badge-stray', Rescued: 'badge-rescued',

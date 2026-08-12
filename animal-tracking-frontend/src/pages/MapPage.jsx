@@ -11,7 +11,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const API = 'http://localhost:5000/api';
+const API = 'https://pawtrack-backend.vercel.app/api';
 
 const pinColor = (status, isEmergency) => {
   if (isEmergency) return '#dc2626';
