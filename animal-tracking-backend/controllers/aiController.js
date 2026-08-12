@@ -5,7 +5,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
   try {
-    const apiKey =
+    let apiKey =
       process.env.GEMINI_API_KEY ||
       process.env.VITE_GEMINI_API_KEY ||
       process.env.REACT_APP_GEMINI_API_KEY;
@@ -17,6 +17,9 @@ exports.identifyAnimal = async (req, res, next) => {
       });
     }
 
+    // Clean spaces or extra quotes from API key
+    apiKey = apiKey.trim().replace(/^["']|["']$/g, '');
+
     const { imageBase64, mimeType } = req.body;
 
     if (!imageBase64) {
@@ -25,13 +28,11 @@ exports.identifyAnimal = async (req, res, next) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // List of active models to try sequentially
-    const candidateModels = [
-      'gemini-1.5-flash',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash-8b',
-      'gemini-2.0-flash-exp',
-    ];
+    // Standard production model
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
 
     const prompt = `
       Analyze this animal image for a Stray Animal Tracking & Care System.
@@ -53,32 +54,8 @@ exports.identifyAnimal = async (req, res, next) => {
       },
     };
 
-    let responseText = null;
-    let lastError = null;
-    let usedModelName = '';
-
-    // Try each model until generateContent succeeds
-    for (const modelName of candidateModels) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: { responseMimeType: 'application/json' },
-        });
-        const result = await model.generateContent([prompt, imagePart]);
-        responseText = result.response.text();
-        if (responseText) {
-          usedModelName = modelName;
-          break;
-        }
-      } catch (err) {
-        console.warn(`Model ${modelName} failed, trying next candidate...`, err.message);
-        lastError = err;
-      }
-    }
-
-    if (!responseText) {
-      throw lastError || new Error('No compatible Gemini model succeeded.');
-    }
+    const result = await model.generateContent([prompt, imagePart]);
+    const responseText = result.response.text();
 
     let parsedData;
     try {
@@ -93,10 +70,12 @@ exports.identifyAnimal = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      usedModel: usedModelName,
       data: parsedData,
     });
   } catch (error) {
-    next(error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Error communicating with Gemini API.',
+    });
   }
 };
