@@ -37,12 +37,12 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    // Active OpenRouter Multimodal/Vision models to try sequentially
+    // Verified OpenRouter Free Multimodal/Vision models
     const candidateModels = [
+      'google/gemini-2.0-flash-thinking-exp:free',
       'meta-llama/llama-3.2-11b-vision-instruct:free',
-      'google/gemini-2.0-flash-lite-001:free',
-      'google/gemini-2.0-flash-001',
-      'google/gemini-flash-1.5'
+      'qwen/qwen-2-vl-72b-instruct:free',
+      'mistralai/pixtral-12b:free'
     ];
 
     let rawText = null;
@@ -85,7 +85,7 @@ exports.identifyAnimal = async (req, res, next) => {
           usedModel = modelName;
           break;
         } else {
-          lastError = apiData.error?.message || `Failed model ${modelName}`;
+          lastError = apiData.error?.message || `Model ${modelName} failed.`;
         }
       } catch (err) {
         lastError = err.message;
@@ -95,7 +95,7 @@ exports.identifyAnimal = async (req, res, next) => {
     if (!rawText) {
       return res.status(500).json({
         success: false,
-        error: lastError || 'All candidate OpenRouter models failed.',
+        error: `OpenRouter error: ${lastError || 'All free vision models failed.'}`,
       });
     }
 
