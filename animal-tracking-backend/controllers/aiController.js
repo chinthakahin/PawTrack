@@ -1,4 +1,4 @@
-// @desc    Identify animal species and health condition using OpenRouter
+// @desc    Identify animal species and health condition using OpenRouter (Dynamic Active Models)
 // @route   POST /api/ai/identify
 // @access  Public
 exports.identifyAnimal = async (req, res, next) => {
@@ -11,7 +11,7 @@ exports.identifyAnimal = async (req, res, next) => {
     if (!apiKey) {
       return res.status(500).json({
         success: false,
-        error: 'OpenRouter API Key is missing in environment variables.',
+        error: 'API Key is missing in environment variables.',
       });
     }
 
@@ -37,18 +37,47 @@ exports.identifyAnimal = async (req, res, next) => {
       }
     `;
 
-    // Verified OpenRouter Free Multimodal/Vision models
-    const candidateModels = [
-      'google/gemini-2.0-flash-thinking-exp:free',
-      'meta-llama/llama-3.2-11b-vision-instruct:free',
-      'qwen/qwen-2-vl-72b-instruct:free',
-      'mistralai/pixtral-12b:free'
-    ];
+    // Fetch active models dynamically from OpenRouter to get exact live endpoint IDs
+    let candidateModels = [];
+    try {
+      const modelsRes = await fetch('https://openrouter.ai/api/v1/models');
+      const modelsJson = await modelsRes.json();
+
+      if (modelsJson.data && Array.isArray(modelsJson.data)) {
+        // Filter free models that support vision / multimodal / image input
+        candidateModels = modelsJson.data
+          .filter((m) => {
+            const isFree = m.id.endsWith(':free') || m.pricing?.prompt === '0';
+            const modality = m.architecture?.modality || '';
+            const isVision =
+              modality.includes('image') ||
+              modality.includes('multimodal') ||
+              m.id.includes('vision') ||
+              m.id.includes('gemini') ||
+              m.id.includes('vl') ||
+              m.id.includes('pixtral');
+            return isFree && isVision;
+          })
+          .map((m) => m.id);
+      }
+    } catch (e) {
+      console.warn('Could not fetch OpenRouter models dynamically, using fallback list:', e.message);
+    }
+
+    // Fallback model array if dynamic API query is empty
+    if (candidateModels.length === 0) {
+      candidateModels = [
+        'meta-llama/llama-3.2-11b-vision-instruct:free',
+        'qwen/qwen-2-vl-72b-instruct:free',
+        'google/gemini-2.0-flash-exp:free',
+      ];
+    }
 
     let rawText = null;
     let lastError = null;
     let usedModel = '';
 
+    // Loop through live models until one succeeds
     for (const modelName of candidateModels) {
       try {
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -57,7 +86,7 @@ exports.identifyAnimal = async (req, res, next) => {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://pawtrack.app',
-            'X-Title': 'PawTrack'
+            'X-Title': 'PawTrack',
           },
           body: JSON.stringify({
             model: modelName,
@@ -69,13 +98,13 @@ exports.identifyAnimal = async (req, res, next) => {
                   {
                     type: 'image_url',
                     image_url: {
-                      url: `data:${formattedMime};base64,${cleanBase64}`
-                    }
-                  }
-                ]
-              }
-            ]
-          })
+                      url: `data:${formattedMime};base64,${cleanBase64}`,
+                    },
+                  },
+                ],
+              },
+            ],
+          }),
         });
 
         const apiData = await response.json();
@@ -85,7 +114,7 @@ exports.identifyAnimal = async (req, res, next) => {
           usedModel = modelName;
           break;
         } else {
-          lastError = apiData.error?.message || `Model ${modelName} failed.`;
+          lastError = apiData.error?.message || `Model ${modelName} failed`;
         }
       } catch (err) {
         lastError = err.message;
@@ -95,7 +124,7 @@ exports.identifyAnimal = async (req, res, next) => {
     if (!rawText) {
       return res.status(500).json({
         success: false,
-        error: `OpenRouter error: ${lastError || 'All free vision models failed.'}`,
+        error: `AI identification failed: ${lastError || 'No available free vision model responded.'}`,
       });
     }
 
