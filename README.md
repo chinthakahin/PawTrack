@@ -27,39 +27,6 @@ A comprehensive full-stack web application designed to manage and track stray an
 
 To run this project locally on your machine:
 
-1. **Clone the repository:**
-   ```bash
-  git clone `https://github.com/chinthakahin/PawTrack.git`
-
-Setup Backend:
-
-Navigate to the backend folder and install dependencies:
-
-Bash
-cd animal-tracking-backend
-npm install
-Create a .env file and add your MongoDB connection string and PORT.
-
-Start the server:
-
-Bash
-npm start
-Setup Frontend:
-
-Navigate to the frontend folder and install dependencies:
-
-Bash
-cd animal-tracking-frontend
-npm install
-
-Start the React development server:
-
-Bash
-npm run dev
-
-👨‍💻 Author
-H.M.C.B. Hindagoda
-
-
-
-   
+**1. Clone the repository:**
+```bash
+git clone https://github.com/chinthakahin/PawTrack.git
