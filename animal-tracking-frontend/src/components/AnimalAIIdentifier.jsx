@@ -39,7 +39,8 @@ const AnimalAIIdentifier = ({ onNavigate }) => {
     setResult(null);
 
     try {
-      const response = await fetch('https://pawtrack-backend.vercel.app/api/ai/identify', {
+      // මෙතන තමයි Localhost ලින්ක් එකට වෙනස් කළේ 👇
+      const response = await fetch('http://localhost:5000/api/ai/identify', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
