@@ -6,7 +6,7 @@ A comprehensive full-stack web application designed to manage and track stray an
 
 ## 🚀 Tech Stack
 
-* **Frontend:** React.js, Tailwind CSS
+* **Frontend:** React.js,CSS
 * **Backend:** Node.js, Express.js
 * **Database:** MongoDB
 * **Deployment:** Vercel (Frontend)
